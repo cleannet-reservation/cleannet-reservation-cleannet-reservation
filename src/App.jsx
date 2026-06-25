@@ -284,31 +284,35 @@ function BookingFlow({ config }) {
     setPaying(true);
     setPayError(null);
     try {
+      // Save booking data to sessionStorage so success page can send confirmation email
+      sessionStorage.setItem("cleannet_booking", JSON.stringify({
+        prenom: form.prenom, nom: form.nom, email: form.email,
+        telephone: form.telephone, adresse: form.adresse,
+        service: service.name, option: option.label,
+        date: form.date, creneau: `${form.timeSlot} → ${form.timeSlotEnd}`,
+        total: fmt(subtotal), acompte: fmt(acompte),
+        message: form.message || "",
+      }));
+
       const res = await fetch("/api/create-checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          amount: Math.round(acompte * 100), // centimes
+          amount: Math.round(acompte * 100),
           currency: "eur",
           customerEmail: form.email,
           description: `Acompte ${company.acomptePercent}% — ${service.name} (${option.label}) — ${form.date} ${form.timeSlot}`,
           metadata: {
-            prenom: form.prenom,
-            nom: form.nom,
-            telephone: form.telephone,
-            adresse: form.adresse,
-            service: service.name,
-            option: option.label,
-            date: form.date,
-            creneau: `${form.timeSlot} → ${form.timeSlotEnd}`,
-            total_estime: subtotal.toFixed(2),
-            acompte: acompte.toFixed(2),
+            prenom: form.prenom, nom: form.nom, telephone: form.telephone,
+            adresse: form.adresse, service: service.name, option: option.label,
+            date: form.date, creneau: `${form.timeSlot} → ${form.timeSlotEnd}`,
+            total_estime: subtotal.toFixed(2), acompte: acompte.toFixed(2),
           },
         }),
       });
       const data = await res.json();
       if (data.url) {
-        window.location.href = data.url; // Redirect to Stripe Checkout
+        window.location.href = data.url;
       } else {
         setPayError("Erreur lors de la création du paiement. Veuillez réessayer.");
       }
