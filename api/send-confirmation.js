@@ -129,6 +129,25 @@ export default async function handler(req, res) {
   };
 
   try {
+    // Sauvegarder dans Supabase
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
+      await fetch(`${process.env.SUPABASE_URL}/rest/v1/reservations`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": process.env.SUPABASE_ANON_KEY,
+          "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({
+          prenom, nom, email, telephone, adresse,
+          service, option, date, creneau,
+          total: total?.replace(" €", "").replace(",", "."),
+          acompte: acompte?.replace(" €", "").replace(",", "."),
+          statut: "attente",
+          source: "site",
+        }),
+      });
+    }
     // Email au propriétaire
     await sendEmail(
       OWNER_EMAIL,

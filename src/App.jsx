@@ -283,9 +283,34 @@ function BookingFlow({ config }) {
     return true;
   };
 
+  const [payMode, setPayMode] = useState(null);
+  const [requesting, setRequesting] = useState(false);
+  const [requestDone, setRequestDone] = useState(false);
+
   const upsellTotal = upsells.filter(u => activeUpsells.includes(u.id)).reduce((s, u) => s + Number(u.price), 0);
   const subtotal = (option ? Number(option.price) : 0) + upsellTotal;
   const acompte = subtotal * (Number(company.acomptePercent) / 100);
+
+  const handleRequestOnly = async () => {
+    setRequesting(true);
+    try {
+      await fetch("/api/send-confirmation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prenom: form.prenom, nom: form.nom, email: form.email,
+          telephone: form.telephone, adresse: form.adresse,
+          service: service.name, option: option.label,
+          date: form.date, creneau: `${form.timeSlot} → ${form.timeSlotEnd}`,
+          total: fmt(subtotal), acompte: "0",
+          message: form.message || "",
+          statut: "attente",
+        }),
+      });
+    } catch (_) {}
+    setRequesting(false);
+    setRequestDone(true);
+  };
 
   const handlePay = async () => {
     setPaying(true);
@@ -538,7 +563,6 @@ function BookingFlow({ config }) {
               ))}
               <div style={{ height: 1, background: "#E5E7EB", margin: "8px 0" }} />
               <Row label="Total estimé" val={fmt(subtotal)} bold />
-              <Row label={`Acompte (${company.acomptePercent}%)`} val={fmt(acompte)} color={color} />
             </div>
             <div style={recapCard}>
               <p style={{ fontSize: 12, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 10px" }}>Détails</p>
@@ -548,23 +572,99 @@ function BookingFlow({ config }) {
               <Row label="Adresse" val={form.adresse} />
               {form.message && <Row label="Note" val={form.message} />}
             </div>
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 12, background: color + "11", border: `1.5px solid ${color}`, borderRadius: 10, padding: "14px 16px", marginBottom: 20, fontSize: 14, lineHeight: 1.5 }}>
-              <span style={{ fontSize: 20 }}>🔒</span>
-              <div>
-                <strong>Acompte de {fmt(acompte)}</strong> pour bloquer votre créneau<br />
-                <span style={{ fontSize: 12, color: "#6B7280" }}>Le solde de {fmt(subtotal - acompte)} sera réglé le jour de l'intervention</span>
-              </div>
-            </div>
-            {payError && (
-              <div style={{ background: "#FEF2F2", border: "1.5px solid #FCA5A5", borderRadius: 10, padding: "12px 16px", fontSize: 13, color: "#DC2626", marginBottom: 14 }}>
-                ⚠️ {payError}
+
+            {/* Payment mode choice */}
+            {!requestDone && (
+              <>
+                <p style={{ fontSize: 14, fontWeight: 700, color: "#1A1F36", margin: "0 0 10px" }}>
+                  Comment souhaitez-vous confirmer votre réservation ?
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
+
+                  {/* Option acompte */}
+                  <button onClick={() => setPayMode("acompte")}
+                    style={{
+                      border: `2px solid ${payMode === "acompte" ? color : "#E5E7EB"}`,
+                      background: payMode === "acompte" ? color + "0D" : "#fff",
+                      borderRadius: 12, padding: "16px", cursor: "pointer", textAlign: "left",
+                    }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                      <span style={{ fontSize: 20 }}>🔒</span>
+                      <span style={{ fontWeight: 800, fontSize: 14, color: "#1A1F36" }}>
+                        Payer un acompte — {fmt(acompte)}
+                      </span>
+                      {payMode === "acompte" && <span style={{ marginLeft: "auto", background: color, color: "#fff", borderRadius: "50%", width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700 }}>✓</span>}
+                    </div>
+                    <p style={{ margin: 0, fontSize: 12, color: "#6B7280", lineHeight: 1.5 }}>
+                      Votre créneau est <strong>bloqué immédiatement</strong>. Paiement sécurisé via Stripe.<br />
+                      Solde restant ({fmt(subtotal - acompte)}) réglé le jour de l'intervention.
+                    </p>
+                  </button>
+
+                  {/* Option sans acompte */}
+                  <button onClick={() => setPayMode("sans")}
+                    style={{
+                      border: `2px solid ${payMode === "sans" ? "#059669" : "#E5E7EB"}`,
+                      background: payMode === "sans" ? "#F0FDF4" : "#fff",
+                      borderRadius: 12, padding: "16px", cursor: "pointer", textAlign: "left",
+                    }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                      <span style={{ fontSize: 20 }}>📋</span>
+                      <span style={{ fontWeight: 800, fontSize: 14, color: "#1A1F36" }}>
+                        Demande sans acompte
+                      </span>
+                      {payMode === "sans" && <span style={{ marginLeft: "auto", background: "#059669", color: "#fff", borderRadius: "50%", width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700 }}>✓</span>}
+                    </div>
+                    <p style={{ margin: 0, fontSize: 12, color: "#6B7280", lineHeight: 1.5 }}>
+                      Votre demande est envoyée <strong>sans paiement</strong>.<br />
+                      Le prestataire vous contactera pour confirmer le rendez-vous.
+                    </p>
+                  </button>
+                </div>
+
+                {/* Action buttons */}
+                {payMode === "acompte" && (
+                  <>
+                    {payError && (
+                      <div style={{ background: "#FEF2F2", border: "1.5px solid #FCA5A5", borderRadius: 10, padding: "12px 16px", fontSize: 13, color: "#DC2626", marginBottom: 14 }}>
+                        ⚠️ {payError}
+                      </div>
+                    )}
+                    <button onClick={handlePay} disabled={paying}
+                      style={{ width: "100%", background: paying ? "#9CA3AF" : color, color: "#fff", border: "none", borderRadius: 10, padding: 16, fontSize: 15, fontWeight: 800, cursor: paying ? "not-allowed" : "pointer" }}>
+                      {paying ? "⏳ Redirection vers Stripe..." : `Payer l'acompte — ${fmt(acompte)}`}
+                    </button>
+                    <p style={{ textAlign: "center", fontSize: 12, color: "#9CA3AF", marginTop: 10 }}>🔐 Paiement sécurisé via Stripe · SSL</p>
+                  </>
+                )}
+
+                {payMode === "sans" && (
+                  <button onClick={handleRequestOnly} disabled={requesting}
+                    style={{ width: "100%", background: requesting ? "#9CA3AF" : "#059669", color: "#fff", border: "none", borderRadius: 10, padding: 16, fontSize: 15, fontWeight: 800, cursor: requesting ? "not-allowed" : "pointer" }}>
+                    {requesting ? "⏳ Envoi en cours..." : "Envoyer ma demande de réservation →"}
+                  </button>
+                )}
+              </>
+            )}
+
+            {/* Confirmation sans acompte */}
+            {requestDone && (
+              <div style={{ textAlign: "center", padding: "24px 0" }}>
+                <div style={{ fontSize: 48, marginBottom: 12 }}>📬</div>
+                <h3 style={{ fontSize: 18, fontWeight: 800, margin: "0 0 8px" }}>Demande envoyée !</h3>
+                <p style={{ fontSize: 14, color: "#6B7280", lineHeight: 1.7, margin: "0 0 16px" }}>
+                  Votre demande a bien été reçue, <strong>{form.prenom}</strong>.<br />
+                  Nous vous contacterons sous 24h pour confirmer votre rendez-vous du <strong>{form.date}</strong>.
+                </p>
+                <div style={{ background: "#FFF7ED", border: "1.5px solid #F59E0B", borderRadius: 10, padding: "12px 16px", fontSize: 13, color: "#92400E", marginBottom: 16 }}>
+                  ⏳ En attente de confirmation — votre créneau n'est pas encore bloqué
+                </div>
+                <button onClick={() => { setStep(0); setService(null); setOption(null); setActiveUpsells([]); setForm({}); setPayMode(null); setRequestDone(false); }}
+                  style={{ background: color, color: "#fff", border: "none", borderRadius: 8, padding: "11px 24px", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                  Nouvelle réservation
+                </button>
               </div>
             )}
-            <button onClick={handlePay} disabled={paying}
-              style={{ width: "100%", background: paying ? "#9CA3AF" : color, color: "#fff", border: "none", borderRadius: 10, padding: 16, fontSize: 15, fontWeight: 800, cursor: paying ? "not-allowed" : "pointer" }}>
-              {paying ? "⏳ Redirection vers Stripe..." : `Confirmer et payer l'acompte — ${fmt(acompte)}`}
-            </button>
-            <p style={{ textAlign: "center", fontSize: 12, color: "#9CA3AF", marginTop: 10 }}>🔐 Paiement sécurisé via Stripe · SSL</p>
           </>
         )}
       </div>
@@ -602,7 +702,8 @@ const EMPTY_FORM = {
 };
 
 function ReservationsDashboard({ color, services }) {
-  const [reservations, setReservations] = useState(loadReservations);
+  const [reservations, setReservations] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [filterStatut, setFilterStatut] = useState("all");
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -610,12 +711,28 @@ function ReservationsDashboard({ color, services }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [detailId, setDetailId] = useState(null);
 
-  const save = (list) => { setReservations(list); saveReservations(list); };
+  // Load from Supabase
+  const fetchReservations = async () => {
+    try {
+      const r = await fetch("/api/reservations");
+      const data = await r.json();
+      if (Array.isArray(data)) setReservations(data);
+    } catch (_) {
+      // Fallback to localStorage
+      setReservations(loadReservations());
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchReservations(); }, []);
+
+  const saveLocal = (list) => { setReservations(list); saveReservations(list); };
 
   const filtered = reservations
     .filter(r => filterStatut === "all" || r.statut === filterStatut)
     .filter(r => !search || `${r.prenom} ${r.nom} ${r.service} ${r.date}`.toLowerCase().includes(search.toLowerCase()))
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    .sort((a, b) => new Date(b.created_at || b.createdAt) - new Date(a.created_at || a.createdAt));
 
   const stats = {
     total: reservations.length,
@@ -628,24 +745,73 @@ function ReservationsDashboard({ color, services }) {
   const openAdd = () => { setForm(EMPTY_FORM); setEditId(null); setShowForm(true); };
   const openEdit = (r) => { setForm({ ...r }); setEditId(r.id); setShowForm(true); setDetailId(null); };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.prenom || !form.nom || !form.date) return;
-    if (editId) {
-      save(reservations.map(r => r.id === editId ? { ...form, id: editId, updatedAt: new Date().toISOString() } : r));
-    } else {
-      save([{ ...form, id: uid(), createdAt: new Date().toISOString() }, ...reservations]);
+    try {
+      if (editId) {
+        await fetch("/api/reservations", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...form, id: editId }),
+        });
+      } else {
+        await fetch("/api/reservations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...form, source: "manuel" }),
+        });
+      }
+      await fetchReservations();
+    } catch (_) {
+      // Fallback localStorage
+      if (editId) {
+        saveLocal(reservations.map(r => r.id === editId ? { ...form, id: editId } : r));
+      } else {
+        saveLocal([{ ...form, id: uid(), createdAt: new Date().toISOString() }, ...reservations]);
+      }
     }
     setShowForm(false);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (!confirm("Supprimer cette réservation ?")) return;
-    save(reservations.filter(r => r.id !== id));
+    try {
+      await fetch("/api/reservations", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      await fetchReservations();
+    } catch (_) {
+      saveLocal(reservations.filter(r => r.id !== id));
+    }
     setDetailId(null);
   };
 
-  const updateStatut = (id, statut) => {
-    save(reservations.map(r => r.id === id ? { ...r, statut } : r));
+  const updateStatut = async (id, statut) => {
+    try {
+      await fetch("/api/reservations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, statut }),
+      });
+      setReservations(prev => prev.map(r => r.id === id ? { ...r, statut } : r));
+    } catch (_) {
+      saveLocal(reservations.map(r => r.id === id ? { ...r, statut } : r));
+    }
+  };
+
+  const updateNote = async (id, note) => {
+    try {
+      await fetch("/api/reservations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, note }),
+      });
+      setReservations(prev => prev.map(r => r.id === id ? { ...r, note } : r));
+    } catch (_) {
+      saveLocal(reservations.map(r => r.id === id ? { ...r, note } : r));
+    }
   };
 
   const getStatut = (id) => STATUTS.find(s => s.id === id) || STATUTS[0];
@@ -686,7 +852,12 @@ function ReservationsDashboard({ color, services }) {
       </div>
 
       {/* List */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div style={{ textAlign: "center", padding: "40px 20px", color: "#9CA3AF" }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>⏳</div>
+          <p style={{ margin: 0, fontSize: 14 }}>Chargement des réservations…</p>
+        </div>
+      ) : filtered.length === 0 ? (
         <div style={{ textAlign: "center", padding: "40px 20px", background: "#F7F8FC", borderRadius: 12, color: "#9CA3AF" }}>
           <div style={{ fontSize: 36, marginBottom: 8 }}>📋</div>
           <p style={{ margin: 0, fontSize: 14 }}>
@@ -773,7 +944,7 @@ function ReservationsDashboard({ color, services }) {
                 <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>📝 Note interne</label>
                 <textarea
                   value={detail.note || ""}
-                  onChange={e => save(reservations.map(r => r.id === detail.id ? { ...r, note: e.target.value } : r))}
+                  onChange={e => updateNote(detail.id, e.target.value)}
                   placeholder="Ajouter une note..."
                   style={{ ...inputStyle, height: 80, resize: "vertical" }}
                 />
