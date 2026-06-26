@@ -12,7 +12,8 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Supabase not configured" });
   }
 
-  const base = `${SUPABASE_URL}/rest/v1/reservations`;
+  const cleanUrl = SUPABASE_URL.replace(/\/rest\/v1\/?$/, "");
+  const base = `${cleanUrl}/rest/v1/reservations`;
 
   // GET — liste toutes les réservations
   if (req.method === "GET") {
