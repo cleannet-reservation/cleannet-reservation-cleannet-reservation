@@ -291,24 +291,39 @@ function BookingFlow({ config }) {
   const subtotal = (option ? Number(option.price) : 0) + upsellTotal;
   const acompte = subtotal * (Number(company.acomptePercent) / 100);
 
-  const handleRequestOnly = async () => {
-    setRequesting(true);
-    try {
-      await fetch("/api/send-confirmation", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prenom: form.prenom, nom: form.nom, email: form.email,
-          telephone: form.telephone, adresse: form.adresse,
-          service: service.name, option: option.label,
-          date: form.date, creneau: `${form.timeSlot} → ${form.timeSlotEnd}`,
-          total: fmt(subtotal), acompte: "0",
-          message: form.message || "",
-          statut: "attente",
-        }),
-      });
-    } catch (_) {}
-    setRequesting(false);
+  const handleRequestOnly = () => {
+    // Sauvegarder dans Supabase
+    fetch("/api/reservations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prenom: form.prenom, nom: form.nom, email: form.email,
+        telephone: form.telephone, adresse: form.adresse,
+        service: service.name, option: option.label,
+        date: form.date, creneau: `${form.timeSlot} → ${form.timeSlotEnd}`,
+        total: String(subtotal.toFixed(2)), acompte: "0",
+        statut: "attente", source: "site",
+      }),
+    }).catch(() => {});
+
+    const msg = encodeURIComponent(
+`🗓 *Nouvelle réservation CleanNet*
+
+👤 *Client :* ${form.prenom} ${form.nom}
+📞 *Téléphone :* ${form.telephone}
+📧 *Email :* ${form.email}
+📍 *Adresse :* ${form.adresse}
+
+🧹 *Service :* ${service.name} — ${option.label}
+📅 *Date :* ${form.date}
+🕐 *Créneau :* ${form.timeSlot} → ${form.timeSlotEnd}
+💶 *Total estimé :* ${fmt(subtotal)}
+💳 *Mode :* Sans acompte
+${form.message ? `📝 *Note :* ${form.message}` : ""}
+
+_Envoyé depuis le site de réservation CleanNet_`
+    );
+    window.open(`https://wa.me/33612922048?text=${msg}`, "_blank");
     setRequestDone(true);
   };
 
@@ -639,9 +654,9 @@ function BookingFlow({ config }) {
                 )}
 
                 {payMode === "sans" && (
-                  <button onClick={handleRequestOnly} disabled={requesting}
-                    style={{ width: "100%", background: requesting ? "#9CA3AF" : "#059669", color: "#fff", border: "none", borderRadius: 10, padding: 16, fontSize: 15, fontWeight: 800, cursor: requesting ? "not-allowed" : "pointer" }}>
-                    {requesting ? "⏳ Envoi en cours..." : "Envoyer ma demande de réservation →"}
+                  <button onClick={handleRequestOnly}
+                    style={{ width: "100%", background: "#25D366", color: "#fff", border: "none", borderRadius: 10, padding: 16, fontSize: 15, fontWeight: 800, cursor: "pointer" }}>
+                    📲 Envoyer ma réservation sur WhatsApp →
                   </button>
                 )}
               </>

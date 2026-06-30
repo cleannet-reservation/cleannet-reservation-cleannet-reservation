@@ -9,9 +9,14 @@ export default async function handler(req, res) {
     total, acompte, message, statut,
   } = req.body;
 
-  const SENDER_EMAIL = process.env.SENDER_EMAIL || "contact@cleannet06.fr";
+  const SENDER_EMAIL = process.env.SENDER_EMAIL || "cleannet06600@gmail.com";
   const SENDER_NAME = "CleanNet Multi-Service 06";
   const OWNER_EMAIL = process.env.OWNER_EMAIL || SENDER_EMAIL;
+  const REPLY_TO = SENDER_EMAIL;
+  // Use Brevo-friendly sender if Gmail detected
+  const ACTUAL_SENDER = SENDER_EMAIL.includes("gmail.com")
+    ? "no-reply@cleannetmultiservice06.com"
+    : SENDER_EMAIL;
   const avecAcompte = acompte && acompte !== "0" && acompte !== "0,00 €";
 
   // ── Sauvegarder dans Supabase ─────────────────────────────────────────────
@@ -113,7 +118,13 @@ export default async function handler(req, res) {
     const r = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
       headers: { "Content-Type": "application/json", "api-key": process.env.BREVO_API_KEY },
-      body: JSON.stringify({ sender: { name: SENDER_NAME, email: SENDER_EMAIL }, to: [{ email: to, name: toName }], subject, htmlContent: html }),
+      body: JSON.stringify({
+        sender: { name: SENDER_NAME, email: SENDER_EMAIL },
+        to: [{ email: to, name: toName }],
+        replyTo: { email: OWNER_EMAIL },
+        subject,
+        htmlContent: html
+      }),
     });
     if (!r.ok) {
       const err = await r.text();
