@@ -3,170 +3,142 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  if (!process.env.BREVO_API_KEY) {
-    return res.status(500).json({ error: "Brevo not configured" });
-  }
-
   const {
     prenom, nom, email, telephone, adresse,
     service, option, date, creneau,
-    total, acompte, message,
+    total, acompte, message, statut,
   } = req.body;
 
-  const SENDER_EMAIL = process.env.SENDER_EMAIL || "contact@cleannet06.fr";
+  const SENDER_EMAIL = process.env.SENDER_EMAIL || "cleannet06600@gmail.com";
   const SENDER_NAME = "CleanNet Multi-Service 06";
   const OWNER_EMAIL = process.env.OWNER_EMAIL || SENDER_EMAIL;
+  const REPLY_TO = SENDER_EMAIL;
+  // Use Brevo-friendly sender if Gmail detected
+  const ACTUAL_SENDER = SENDER_EMAIL.includes("gmail.com")
+    ? "no-reply@cleannetmultiservice06.com"
+    : SENDER_EMAIL;
+  const avecAcompte = acompte && acompte !== "0" && acompte !== "0,00 €";
 
-  // ── Email au propriétaire ──────────────────────────────────────────────────
-  const ownerHtml = `
-    <div style="font-family:Inter,system-ui,sans-serif;max-width:600px;margin:0 auto;background:#F7F8FC;padding:24px;">
-      <div style="background:#0057FF;color:#fff;padding:20px 24px;border-radius:12px 12px 0 0;">
-        <h1 style="margin:0;font-size:20px;">✦ Nouvelle réservation reçue !</h1>
-        <p style="margin:6px 0 0;opacity:0.85;font-size:14px;">CleanNet Multi-Service 06</p>
-      </div>
-      <div style="background:#fff;padding:24px;border-radius:0 0 12px 12px;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
-        
-        <h2 style="font-size:16px;color:#1A1F36;margin:0 0 16px;">👤 Client</h2>
-        <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:24px;">
-          <tr><td style="padding:8px 0;color:#6B7280;width:140px;">Nom</td><td style="padding:8px 0;font-weight:600;color:#1A1F36;">${prenom} ${nom}</td></tr>
-          <tr><td style="padding:8px 0;color:#6B7280;">Email</td><td style="padding:8px 0;font-weight:600;color:#1A1F36;">${email}</td></tr>
-          <tr><td style="padding:8px 0;color:#6B7280;">Téléphone</td><td style="padding:8px 0;font-weight:600;color:#1A1F36;">${telephone}</td></tr>
-          <tr><td style="padding:8px 0;color:#6B7280;">Adresse</td><td style="padding:8px 0;font-weight:600;color:#1A1F36;">${adresse}</td></tr>
-          ${message ? `<tr><td style="padding:8px 0;color:#6B7280;">Note</td><td style="padding:8px 0;color:#1A1F36;">${message}</td></tr>` : ""}
-        </table>
-
-        <h2 style="font-size:16px;color:#1A1F36;margin:0 0 16px;">🧹 Prestation</h2>
-        <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:24px;">
-          <tr><td style="padding:8px 0;color:#6B7280;width:140px;">Service</td><td style="padding:8px 0;font-weight:600;color:#1A1F36;">${service}</td></tr>
-          <tr><td style="padding:8px 0;color:#6B7280;">Formule</td><td style="padding:8px 0;font-weight:600;color:#1A1F36;">${option}</td></tr>
-          <tr><td style="padding:8px 0;color:#6B7280;">Date</td><td style="padding:8px 0;font-weight:600;color:#1A1F36;">${date}</td></tr>
-          <tr><td style="padding:8px 0;color:#6B7280;">Créneau</td><td style="padding:8px 0;font-weight:600;color:#1A1F36;">${creneau}</td></tr>
-        </table>
-
-        <div style="background:#F7F8FC;border-radius:10px;padding:16px 20px;margin-bottom:16px;">
-          <div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px;">
-            <span style="color:#6B7280;">Total estimé</span>
-            <span style="font-weight:700;color:#1A1F36;">${total}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;font-size:15px;">
-            <span style="color:#6B7280;">Acompte reçu</span>
-            <span style="font-weight:800;color:#0057FF;">${acompte}</span>
-          </div>
-        </div>
-
-        <p style="font-size:12px;color:#9CA3AF;text-align:center;margin-top:20px;">
-          CleanNet Multi-Service 06 · Alpes-Maritimes
-        </p>
-      </div>
-    </div>
-  `;
-
-  // ── Email au client ────────────────────────────────────────────────────────
-  const clientHtml = `
-    <div style="font-family:Inter,system-ui,sans-serif;max-width:600px;margin:0 auto;background:#F7F8FC;padding:24px;">
-      <div style="background:#0057FF;color:#fff;padding:20px 24px;border-radius:12px 12px 0 0;">
-        <h1 style="margin:0;font-size:20px;">✅ Réservation confirmée !</h1>
-        <p style="margin:6px 0 0;opacity:0.85;font-size:14px;">CleanNet Multi-Service 06</p>
-      </div>
-      <div style="background:#fff;padding:24px;border-radius:0 0 12px 12px;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
-        
-        <p style="font-size:15px;color:#1A1F36;line-height:1.6;">
-          Bonjour <strong>${prenom}</strong>,<br><br>
-          Votre demande de réservation a bien été reçue et votre acompte de <strong style="color:#0057FF;">${acompte}</strong> a été encaissé.<br>
-          Nous vous confirmons votre intervention :
-        </p>
-
-        <div style="background:#EEF3FF;border:1.5px solid #0057FF;border-radius:10px;padding:16px 20px;margin:20px 0;">
-          <table style="width:100%;border-collapse:collapse;font-size:14px;">
-            <tr><td style="padding:6px 0;color:#6B7280;width:130px;">Service</td><td style="padding:6px 0;font-weight:700;color:#1A1F36;">${service} — ${option}</td></tr>
-            <tr><td style="padding:6px 0;color:#6B7280;">Date</td><td style="padding:6px 0;font-weight:700;color:#1A1F36;">${date}</td></tr>
-            <tr><td style="padding:6px 0;color:#6B7280;">Créneau</td><td style="padding:6px 0;font-weight:700;color:#1A1F36;">${creneau}</td></tr>
-            <tr><td style="padding:6px 0;color:#6B7280;">Adresse</td><td style="padding:6px 0;font-weight:700;color:#1A1F36;">${adresse}</td></tr>
-          </table>
-        </div>
-
-        <div style="background:#F7F8FC;border-radius:10px;padding:14px 20px;margin-bottom:20px;font-size:14px;">
-          <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-            <span style="color:#6B7280;">Acompte réglé</span>
-            <span style="font-weight:700;color:#059669;">${acompte} ✓</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;">
-            <span style="color:#6B7280;">Solde à régler le jour J</span>
-            <span style="font-weight:700;color:#1A1F36;">${total} − ${acompte}</span>
-          </div>
-        </div>
-
-        <p style="font-size:14px;color:#6B7280;line-height:1.6;">
-          Une question ? Contactez-nous :<br>
-          📞 <strong>${process.env.COMPANY_PHONE || "06 00 00 00 00"}</strong><br>
-          📧 <strong>${SENDER_EMAIL}</strong>
-        </p>
-
-        <p style="font-size:12px;color:#9CA3AF;text-align:center;margin-top:24px;">
-          CleanNet Multi-Service 06 · Alpes-Maritimes<br>
-          Vous recevez cet email car vous avez effectué une réservation sur notre site.
-        </p>
-      </div>
-    </div>
-  `;
-
-  // ── Envoi via Brevo ────────────────────────────────────────────────────────
-  const sendEmail = async (to, toName, subject, html) => {
-    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "api-key": process.env.BREVO_API_KEY,
-      },
-      body: JSON.stringify({
-        sender: { name: SENDER_NAME, email: SENDER_EMAIL },
-        to: [{ email: to, name: toName }],
-        subject,
-        htmlContent: html,
-      }),
-    });
-    return response.ok;
-  };
-
-  try {
-    // Sauvegarder dans Supabase
-    if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
-      await fetch(`${process.env.SUPABASE_URL}/rest/v1/reservations`, {
+  // ── Sauvegarder dans Supabase ─────────────────────────────────────────────
+  const supabaseUrl = (process.env.SUPABASE_URL || "").replace(/\/rest\/v1\/?$/, "");
+  if (supabaseUrl && process.env.SUPABASE_ANON_KEY) {
+    try {
+      await fetch(`${supabaseUrl}/rest/v1/reservations`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "apikey": process.env.SUPABASE_ANON_KEY,
           "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}`,
+          "Prefer": "return=minimal",
         },
         body: JSON.stringify({
           prenom, nom, email, telephone, adresse,
           service, option, date, creneau,
-          total: total?.replace(" €", "").replace(",", "."),
-          acompte: acompte?.replace(" €", "").replace(",", "."),
-          statut: "attente",
+          total: (total || "0").replace(/[^\d.,]/g, "").replace(",", "."),
+          acompte: (acompte || "0").replace(/[^\d.,]/g, "").replace(",", "."),
+          statut: avecAcompte ? "confirme" : "attente",
           source: "site",
         }),
       });
+    } catch (e) {
+      console.error("Supabase save error:", e.message);
     }
-    // Email au propriétaire
-    await sendEmail(
-      OWNER_EMAIL,
-      SENDER_NAME,
-      `🔔 Nouvelle réservation — ${prenom} ${nom} — ${date}`,
-      ownerHtml
-    );
+  }
 
-    // Email au client
-    await sendEmail(
-      email,
-      `${prenom} ${nom}`,
-      `✅ Confirmation de votre réservation CleanNet — ${date}`,
-      clientHtml
-    );
+  // ── Email au propriétaire ──────────────────────────────────────────────────
+  const ownerHtml = `
+    <div style="font-family:Inter,system-ui,sans-serif;max-width:600px;margin:0 auto;background:#F7F8FC;padding:24px;">
+      <div style="background:${avecAcompte ? "#0057FF" : "#F59E0B"};color:#fff;padding:20px 24px;border-radius:12px 12px 0 0;">
+        <h1 style="margin:0;font-size:20px;">${avecAcompte ? "✦ Nouvelle réservation (acompte payé)" : "📋 Nouvelle demande (sans acompte)"}</h1>
+        <p style="margin:6px 0 0;opacity:0.85;font-size:14px;">CleanNet Multi-Service 06</p>
+      </div>
+      <div style="background:#fff;padding:24px;border-radius:0 0 12px 12px;">
+        ${!avecAcompte ? `<div style="background:#FFF7ED;border:1.5px solid #F59E0B;border-radius:8px;padding:12px 16px;margin-bottom:20px;font-size:13px;color:#92400E;font-weight:600;">⚠️ Cette réservation est EN ATTENTE — le créneau n'est pas encore bloqué. Confirmez avec le client.</div>` : ""}
+        <h2 style="font-size:15px;color:#1A1F36;margin:0 0 12px;">👤 Client</h2>
+        <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:20px;">
+          <tr><td style="padding:7px 0;color:#6B7280;width:140px;">Nom</td><td style="font-weight:600;">${prenom} ${nom}</td></tr>
+          <tr><td style="padding:7px 0;color:#6B7280;">Email</td><td style="font-weight:600;">${email}</td></tr>
+          <tr><td style="padding:7px 0;color:#6B7280;">Téléphone</td><td style="font-weight:600;">${telephone}</td></tr>
+          <tr><td style="padding:7px 0;color:#6B7280;">Adresse</td><td style="font-weight:600;">${adresse}</td></tr>
+          ${message ? `<tr><td style="padding:7px 0;color:#6B7280;">Note</td><td>${message}</td></tr>` : ""}
+        </table>
+        <h2 style="font-size:15px;color:#1A1F36;margin:0 0 12px;">🧹 Prestation</h2>
+        <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:20px;">
+          <tr><td style="padding:7px 0;color:#6B7280;width:140px;">Service</td><td style="font-weight:600;">${service}</td></tr>
+          <tr><td style="padding:7px 0;color:#6B7280;">Formule</td><td style="font-weight:600;">${option}</td></tr>
+          <tr><td style="padding:7px 0;color:#6B7280;">Date</td><td style="font-weight:600;">${date}</td></tr>
+          <tr><td style="padding:7px 0;color:#6B7280;">Créneau</td><td style="font-weight:600;">${creneau}</td></tr>
+          <tr><td style="padding:7px 0;color:#6B7280;">Total estimé</td><td style="font-weight:800;color:#0057FF;">${total}</td></tr>
+          ${avecAcompte ? `<tr><td style="padding:7px 0;color:#6B7280;">Acompte reçu</td><td style="font-weight:800;color:#059669;">${acompte} ✓</td></tr>` : ""}
+        </table>
+      </div>
+    </div>`;
 
+  // ── Email au client ────────────────────────────────────────────────────────
+  const clientHtml = `
+    <div style="font-family:Inter,system-ui,sans-serif;max-width:600px;margin:0 auto;background:#F7F8FC;padding:24px;">
+      <div style="background:${avecAcompte ? "#0057FF" : "#059669"};color:#fff;padding:20px 24px;border-radius:12px 12px 0 0;">
+        <h1 style="margin:0;font-size:20px;">${avecAcompte ? "✅ Réservation confirmée !" : "📬 Demande de réservation reçue !"}</h1>
+        <p style="margin:6px 0 0;opacity:0.85;font-size:14px;">CleanNet Multi-Service 06</p>
+      </div>
+      <div style="background:#fff;padding:24px;border-radius:0 0 12px 12px;">
+        <p style="font-size:15px;color:#1A1F36;line-height:1.7;">
+          Bonjour <strong>${prenom}</strong>,<br><br>
+          ${avecAcompte
+            ? `Votre réservation est <strong>confirmée</strong> et votre acompte de <strong style="color:#0057FF;">${acompte}</strong> a bien été encaissé.`
+            : `Votre demande de réservation a bien été reçue. Nous vous contacterons <strong>sous 24h</strong> pour confirmer votre créneau.`
+          }
+        </p>
+        ${!avecAcompte ? `<div style="background:#FFF7ED;border:1.5px solid #F59E0B;border-radius:8px;padding:12px 16px;margin-bottom:20px;font-size:13px;color:#92400E;">⏳ <strong>En attente de confirmation</strong> — votre créneau n'est pas encore bloqué.</div>` : ""}
+        <div style="background:#F7F8FC;border-radius:10px;padding:16px 20px;margin:16px 0;">
+          <table style="width:100%;border-collapse:collapse;font-size:14px;">
+            <tr><td style="padding:6px 0;color:#6B7280;width:120px;">Service</td><td style="font-weight:700;">${service} — ${option}</td></tr>
+            <tr><td style="padding:6px 0;color:#6B7280;">Date</td><td style="font-weight:700;">${date}</td></tr>
+            <tr><td style="padding:6px 0;color:#6B7280;">Créneau</td><td style="font-weight:700;">${creneau}</td></tr>
+            <tr><td style="padding:6px 0;color:#6B7280;">Adresse</td><td style="font-weight:700;">${adresse}</td></tr>
+            <tr><td style="padding:6px 0;color:#6B7280;">Total estimé</td><td style="font-weight:700;">${total}</td></tr>
+            ${avecAcompte ? `<tr><td style="padding:6px 0;color:#6B7280;">Acompte réglé</td><td style="font-weight:700;color:#059669;">${acompte} ✓</td></tr>` : ""}
+          </table>
+        </div>
+        <p style="font-size:14px;color:#6B7280;line-height:1.6;">
+          Une question ? Contactez-nous :<br>
+          📞 <strong>${process.env.COMPANY_PHONE || "06 00 00 00 00"}</strong><br>
+          📧 <strong>${SENDER_EMAIL}</strong>
+        </p>
+        <p style="font-size:12px;color:#9CA3AF;text-align:center;margin-top:20px;">CleanNet Multi-Service 06 · Alpes-Maritimes</p>
+      </div>
+    </div>`;
+
+  // ── Envoi Brevo ────────────────────────────────────────────────────────────
+  if (!process.env.BREVO_API_KEY) {
+    return res.status(200).json({ success: true, warning: "Brevo not configured, emails not sent" });
+  }
+
+  const sendEmail = async (to, toName, subject, html) => {
+    const r = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "api-key": process.env.BREVO_API_KEY },
+      body: JSON.stringify({
+        sender: { name: SENDER_NAME, email: SENDER_EMAIL },
+        to: [{ email: to, name: toName }],
+        replyTo: { email: OWNER_EMAIL },
+        subject,
+        htmlContent: html
+      }),
+    });
+    if (!r.ok) {
+      const err = await r.text();
+      throw new Error(`Brevo error: ${err}`);
+    }
+    return true;
+  };
+
+  try {
+    await sendEmail(OWNER_EMAIL, SENDER_NAME, `${avecAcompte ? "🔔" : "📋"} ${avecAcompte ? "Nouvelle réservation" : "Nouvelle demande"} — ${prenom} ${nom} — ${date}`, ownerHtml);
+    await sendEmail(email, `${prenom} ${nom}`, `${avecAcompte ? "✅ Réservation confirmée" : "📬 Demande reçue"} — CleanNet — ${date}`, clientHtml);
     return res.status(200).json({ success: true });
   } catch (error) {
-    console.error("Brevo error:", error.message);
+    console.error("Email error:", error.message);
     return res.status(500).json({ error: error.message });
   }
 }
